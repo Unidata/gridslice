@@ -30,12 +30,16 @@
  * ------------ ----------  ----------- --------------------------
  * 11/17/09     3580        brockwoo    Initial Creation
  * 11/19/13     2495        bclement    changed dim arrays/lists to use npy_intp
+ * Aug 14, 2019 7880        tgurney     Python 3 fixes
+ * Mar 10, 2022 8805        njensen     Disabled old numpy API and fixed compile
+ *                                      errors and warnings that followed
  *
  * </pre>
  *
  * @author brockwoo
- * @version 1
  */
+
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <Python.h>
 #include <stdio.h>
@@ -45,7 +49,7 @@
 
 static PyObject *GridSliceError;
 
-static int dimensions(PyObject * array) {
+static int dimensions(PyArrayObject * array) {
 	int returnValue = 0;
 	int aDim = PyArray_NDIM(array);
 	if (aDim == 3) {
@@ -64,29 +68,42 @@ static int dimensions(PyObject * array) {
 static PyObject * defineNumpySlice(PyObject *self, PyObject* args)
 /* float ** vc3d, float ** param3d, int mnx,
  int nx, int ny, int nz, float param, int sense, float * vc2d) */{
-	PyObject * vc;
-	PyObject * param;
+	PyObject * vcUncast;
+	PyArrayObject * vc;
+	PyObject * paramUncast;
+	PyArrayObject * param;
 	//int mx = 0;
 	int nx = 0;
 	int ny = 0;
 	int nz = 0;
 	float targetLevel;
 	int sense;
-    int vu, pu, uniformity;
-    float * vc2d;
-    float ** vc3d;
-    int * vc3dDim;
-    float ** param3d;
-    int * param3dDim;
-    int levelCount;
-    int vnz,  pnz, vny , pny , vnx , pnx;
-    npy_intp dimSize[2];
-    npy_intp * vdimList;
-    npy_intp * pdimList;
-     
-	if (!PyArg_ParseTuple(args, "OOfi", &vc, &param, &targetLevel, &sense)) {
+	int vu, pu, uniformity;
+	float * vc2d;
+	float ** vc3d;
+	int * vc3dDim;
+	float ** param3d;
+	int * param3dDim;
+	int levelCount;
+	int vnz,  pnz, vny , pny , vnx , pnx;
+	npy_intp dimSize[2];
+	npy_intp * vdimList;
+	npy_intp * pdimList;
+
+	if (!PyArg_ParseTuple(args, "OOfi", &vcUncast, &paramUncast, &targetLevel, &sense)) {
 		return NULL;
 	}
+
+	if (!PyArray_Check(vcUncast)) {
+		PyErr_SetString(GridSliceError, "First argument must be a numpy array.");
+		return NULL;
+	}
+	if (!PyArray_Check(paramUncast)) {
+		PyErr_SetString(GridSliceError, "Second argument must be a numpy array.");
+		return NULL;
+	}
+	vc = (PyArrayObject*) vcUncast;
+	param = (PyArrayObject*) paramUncast;
 
 	vu = dimensions(vc);
 	pu = dimensions(param);
@@ -177,7 +194,7 @@ static PyObject * defineNumpySlice(PyObject *self, PyObject* args)
 		dimSize[0] = ny;
 		dimSize[1] = nx;
 		pyVc2d = PyArray_SimpleNew(2, dimSize, NPY_FLOAT);
-		memcpy(((PyArrayObject *) pyVc2d)->data, vc2d, nx * ny * sizeof(float));
+		memcpy(PyArray_DATA((PyArrayObject *) pyVc2d), vc2d, nx * ny * sizeof(float));
 		free(vc2d);
 		return pyVc2d;
 	} else {
@@ -193,22 +210,25 @@ static PyObject * createNumpySlice(PyObject *self, PyObject* args)
  float ** slice3d, int mnx, int nx, int ny, int nz, int sense,
  float * slice)*/{
 
-	PyObject * vc;
-	PyObject * s3d;
+	PyObject * vcUncast;
+	PyArrayObject * vc;
+	PyObject * s3dUncast;
+	PyArrayObject * s3d;
 	//int mx = 0;
 	int nx = 0;
 	int ny = 0;
 	int nz = 0;
-	PyObject * targetLevel;
+	PyObject * targetLevelUncast;
+	PyArrayObject * targetLevel;
 	int sense;
 	int hyb = DOINTERP;
-    int vu;
+	int vu;
 	int su;
 	int uniformity;
-    int vnz;
-    float * slice = 0;
-    float ** vc3d ;
-    float ** slice3d;
+	int vnz;
+	float * slice = 0;
+	float ** vc3d ;
+	float ** slice3d;
  	int * vc3dDim ;
 	int levelCount;
 	float * vc2d ;
@@ -216,9 +236,25 @@ static PyObject * createNumpySlice(PyObject *self, PyObject* args)
 	npy_intp * vdimList;
 	npy_intp * sdimList;
 
-	if (!PyArg_ParseTuple(args, "OOOi|i", &vc, &s3d, &targetLevel, &sense, &hyb)) {
+	if (!PyArg_ParseTuple(args, "OOOi|i", &vcUncast, &s3dUncast, &targetLevelUncast, &sense, &hyb)) {
 		return NULL;
 	}
+
+	if (!PyArray_Check(vcUncast)) {
+		PyErr_SetString(GridSliceError, "First argument must be a numpy array.");
+		return NULL;
+	}
+	if (!PyArray_Check(s3dUncast)) {
+		PyErr_SetString(GridSliceError, "Second argument must be a numpy array.");
+		return NULL;
+	}
+	if (!PyArray_Check(targetLevelUncast)) {
+		PyErr_SetString(GridSliceError, "Third argument must be a numpy array.");
+		return NULL;
+	}
+	vc = (PyArrayObject*) vcUncast;
+	s3d = (PyArrayObject*) s3dUncast;
+	targetLevel = (PyArrayObject*) targetLevelUncast;
 
 	vu = dimensions(vc);
 	su = dimensions(s3d);
@@ -226,7 +262,7 @@ static PyObject * createNumpySlice(PyObject *self, PyObject* args)
 
 	vdimList = PyArray_DIMS(vc);
 	sdimList = PyArray_DIMS(s3d);
-	
+
 	if (uniformity == 4) {
 		if (vdimList[0] != sdimList[0] || vdimList[1] != sdimList[1]
 				|| vdimList[2] != sdimList[2]) {
@@ -295,12 +331,11 @@ static PyObject * createNumpySlice(PyObject *self, PyObject* args)
 		dimSize[0] = ny;
 		dimSize[1] = nx;
 		pyVc2d = PyArray_SimpleNew(2, dimSize, NPY_FLOAT);
-		memcpy(((PyArrayObject *) pyVc2d)->data, slice, nx * ny * sizeof(float));
+		memcpy(PyArray_DATA((PyArrayObject *) pyVc2d), slice, nx * ny * sizeof(float));
 		free(slice);
 		return pyVc2d;
 	} else {
-		PyErr_SetString(
-				GridSliceError,
+		PyErr_SetString(GridSliceError,
 				"The result grid returned was empty.  Please check your initial data and try again.");
 		return NULL;
 	}
@@ -355,12 +390,21 @@ static PyMethodDef gridslice_methods[] = { { "defineNumpySlice",
 		NULL, NULL, 0, NULL } /* sentinel */
 };
 
-void initgridslice(void) {
+static struct PyModuleDef gridslice_module = {
+	PyModuleDef_HEAD_INIT,
+	"gridslice",
+	"",
+	-1,
+	gridslice_methods
+};
+
+PyMODINIT_FUNC PyInit_gridslice(void) {
 	PyObject *m;
 	import_array();
 	PyImport_AddModule("gridslice");
-	m = Py_InitModule("gridslice", gridslice_methods);
+	m = PyModule_Create(&gridslice_module);
 	GridSliceError = PyErr_NewException("gridslice.error", NULL, NULL);
 	Py_INCREF(GridSliceError);
 	PyModule_AddObject(m, "error", GridSliceError);
+	return m;
 }

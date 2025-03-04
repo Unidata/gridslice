@@ -30,20 +30,24 @@ IF "%PROCESSOR_ARCHITECTURE%" == "AMD64" (
    GOTO ARCH_KNOWN
 :ARCH_KNOWN
 
-SET A2_PYTHON_REG="HKLM\Software\Raytheon\Runtime Environment\AWIPS II Python"
+REM SET A2_PYTHON_REG="HKLM\Software\Raytheon\Runtime Environment\AWIPS II Python"
+REM SET PythonInstallDirectory=C:\Users\tiffanym\AppData\Roaming\UCARUnidata\AWIPSCAVE\Python
+SET PythonInstallDirectory=C:\Users\tiffanym\miniconda3
 
-%REG_EXE% QUERY %A2_PYTHON_REG% /v PythonInstallDirectory > NUL 2>&1
-IF ERRORLEVEL 1 (
-   echo ENVIRONMENT ERROR - Unable to find AWIPS II Python.
-   PAUSE && EXIT 1
-)
+REM %REG_EXE% QUERY %A2_PYTHON_REG% /v PythonInstallDirectory > NUL 2>&1
+REM IF ERRORLEVEL 1 (
+REM   echo ENVIRONMENT ERROR - Unable to find AWIPS II Python.
+REM   PAUSE && EXIT 1
+REM )
 
 REM Determine where AWIPS II Python has been installed.
-FOR /F "tokens=2* delims=	 " %%A IN (
-   '%REG_EXE% QUERY %A2_PYTHON_REG% /v PythonInstallDirectory'
-) DO (
-   SET PythonInstallDirectory=%%B
-)
+REM FOR /F "tokens=2* delims=	 " %%A IN (
+REM   '%REG_EXE% QUERY %A2_PYTHON_REG% /v PythonInstallDirectory'
+REM ) DO (
+
+REM SET PythonInstallDirectory=%%B
+
+REM )
 
 cd "%CONTAINING_DIR%"
 
@@ -52,8 +56,8 @@ cl.exe /LD "%CONTAINING_DIR%..\..\sliceConvert.c" ^
    "%CONTAINING_DIR%..\..\gridslice.c" ^
    -I"%PythonInstallDirectory%\Lib\site-packages\numpy\core\include" ^
    -I"%PythonInstallDirectory%\include" ^
-   "%PythonInstallDirectory%\libs\python27.lib" ^
-   /link/out:gridslice.pyd /EXPORT:initgridslice
+   "%PythonInstallDirectory%\libs\python311.lib" ^
+   /link/out:gridslice.pyd /EXPORT:PyInit_gridslice
 if ERRORLEVEL 1 (
    echo ERROR: The gridslice compile has failed.
    PAUSE && EXIT 1
